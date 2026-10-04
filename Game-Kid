@@ -1,1 +1,441 @@
+--ScriptBlox
+--Owner: correct19©
 
+--This has some bugs that need fixing. 
+--This is a project that has been stalled since 19/07/2026
+
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local function normalizeText(text)
+    if not text then return "" end
+    return text:upper():gsub("%s+", " "):match("^%s*(.-)%s*$")
+end
+
+local function createSound(id, volume)
+    local sound = Instance.new("Sound")
+    sound.SoundId = id
+    sound.Volume = volume or 0.5
+    sound.Parent = playerGui
+    return sound
+end
+
+local clickSound = createSound("rbxassetid://8391933427", 0.5)
+local deleteSound = createSound("rbxassetid://8391933427", 0.4)
+
+local function destroyObject(path)
+    pcall(function()
+        if path then path:Destroy() end
+    end)
+end
+
+local namesToDestroy = {
+    ["PopUps"] = true,
+    ["LaserImage"] = true,
+    ["LaserWarning"] = true,
+    ["Missile"] = true,
+    ["MissileWarning"] = true,
+    ["RetroSniper"] = true,
+    ["Bomb"] = true,
+}
+
+local gamesToDelete = {
+    ["ToTheBeat"] = {"Frame"},
+    ["FlappyBird"] = {"FloorHitbox"},
+    ["DinosaurJumpGame"] = {"BombEnd"},
+}
+
+local answerList = {
+    [normalizeText("ANSWER THE QUESTIONS!")] = true,
+    [normalizeText("GAMEK1D")] = true,
+    [normalizeText("THE RIGHT ANSWER!")] = true,
+    [normalizeText("ZOMBIE")] = true,
+    [normalizeText("CHAPTER FIVE")] = true,
+    [normalizeText("YES!")] = true,
+    [normalizeText("THANK YOU!")] = true,
+    [normalizeText("PICK THIS ONE!")] = true,
+    
+    [normalizeText("RESPONDA AS PERGUNTAS!")] = true,
+    [normalizeText("A RESPOSTA CERTA!")] = true,
+    [normalizeText("ZUMBI")] = true,
+    [normalizeText("CAPÍTULO CINCO")] = true,
+    [normalizeText("SIM!")] = true,
+    [normalizeText("OBRIGADO!")] = true,
+    [normalizeText("CLIQUE NESTE!")] = true
+}
+
+local gamesFastClick = {
+    ["SHOOT!"] = true,
+    ["GET READY TO SHOOT!"] = true
+}
+
+local cooldown = false
+
+local function clickTargetButtonDirect(target, isFast)
+    if not target then return end
+    
+    if target:IsA("TextLabel") and target.Parent then
+        target = target.Parent
+    end
+
+    local absolutePosition = target.AbsolutePosition
+    local absoluteSize = target.AbsoluteSize
+    
+    local centerX = absolutePosition.X + (absoluteSize.X / 2)
+    local centerY = absolutePosition.Y + (absoluteSize.Y / 2)
+    
+    local guiInset, _ = GuiService:GetGuiInset()
+    local clickX = centerX + guiInset.X
+    local clickY = centerY + guiInset.Y
+    
+    if UserInputService.TouchEnabled then
+        local touchId = 1
+        VirtualInputManager:SendTouchEvent(touchId, 0, clickX, clickY)
+        task.wait(isFast and 0.01 or 0.02)
+        VirtualInputManager:SendTouchEvent(touchId, 2, clickX, clickY)
+        VirtualInputManager:SendTouchEvent(touchId, 2, -100, -100)
+    else
+        VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+        task.wait(isFast and 0.01 or 0.02)
+        VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+        VirtualInputManager:SendMouseMoveEvent(-100, -100, game)
+    end
+end
+
+local function scanAndCheckScreen()
+    if cooldown then return end
+
+    for _, descendant in pairs(playerGui:GetDescendants()) do
+        if descendant.Name == "Answers" then
+            for _, answerBtn in pairs(descendant:GetChildren()) do
+                local textLabel = answerBtn:FindFirstChildOfClass("TextLabel") or answerBtn:FindFirstChild("TextLabel")
+                if textLabel and textLabel.Visible then
+                    local cleanText = normalizeText(textLabel.Text)
+                    if answerList[cleanText] then
+                        cooldown = true
+                        clickTargetButtonDirect(answerBtn, false)
+                        task.wait(0.5)
+                        cooldown = false
+                        return
+                    end
+                end
+            end
+        end
+    end
+
+    local descendants = playerGui:GetDescendants()
+    for i = 1, #descendants do
+        local obj = descendants[i]
+        if obj.Visible and (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
+            local cleanText = normalizeText(obj.Text)
+            if cleanText ~= "" and gamesFastClick[cleanText] then
+                cooldown = true
+                clickTargetButtonDirect(obj, true)
+                task.wait(0.12)
+                cooldown = false
+                return
+            end
+        end
+    end
+end
+
+local function cleanAssetsAndFrames(funGuiInstance)
+    if not funGuiInstance then return end
+    
+    local assetsFolder = funGuiInstance:FindFirstChild("Assets")
+    if assetsFolder then
+        for name, _ in pairs(namesToDestroy) do
+            local obj = assetsFolder:FindFirstChild(name)
+            if obj then destroyObject(obj) end
+        end
+    end
+    
+    local gamesFolder = funGuiInstance:FindFirstChild("Games")
+    if gamesFolder then
+        for gameName, itemsToDelete in pairs(gamesToDelete) do
+            local gameFolder = gamesFolder:FindFirstChild(gameName)
+            if gameFolder then
+                for _, itemName in pairs(itemsToDelete) do
+                    local obj = gameFolder:FindFirstChild(itemName)
+                    if obj then destroyObject(obj) end
+                end
+            end
+        end
+        
+        local BossFight = gamesFolder:FindFirstChild("BossFight")
+        if BossFight then
+            local characterFrame = BossFight:FindFirstChild("CharacterFrame")
+            if characterFrame then
+                pcall(function()
+                    characterFrame:SetAttribute("Hitbox", Vector2.new(0, 0))
+                end)
+            end
+        end
+    end
+end
+
+local function executeFullCleanup()
+    local funGuiRep = ReplicatedStorage:FindFirstChild("Cutscenes") and ReplicatedStorage.Cutscenes:FindFirstChild("FunGui")
+    if funGuiRep then
+        cleanAssetsAndFrames(funGuiRep)
+    end
+
+    for _, p in pairs(Players:GetPlayers()) do
+        local pGui = p:FindFirstChild("PlayerGui")
+        if pGui then
+            local clonedFunGui = pGui:FindFirstChild("FunGui")
+            if clonedFunGui then
+                cleanAssetsAndFrames(clonedFunGui)
+            end
+        end
+    end
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ZombiesHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 9999999
+ScreenGui.Parent = playerGui
+
+local active = true
+local fullHeight = 135 
+local minimized = false
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 270, 0, fullHeight)
+Main.Position = UDim2.new(0.5, -135, 0.5, -87)
+Main.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+
+local MainStroke = Instance.new("UIStroke", Main)
+MainStroke.Color = Color3.fromRGB(35, 40, 45)
+MainStroke.Thickness = 1.2
+
+local TopBar = Instance.new("Frame", Main)
+TopBar.Size = UDim2.new(1, 0, 0, 44)
+TopBar.BackgroundColor3 = Color3.fromRGB(120, 20, 20)
+TopBar.BorderSizePixel = 0
+
+local TitleContainer = Instance.new("Frame", TopBar)
+TitleContainer.Size = UDim2.new(1, -90, 1, 0)
+TitleContainer.Position = UDim2.new(0, 12, 0, 0)
+TitleContainer.BackgroundTransparency = 1
+
+local TitleContainerLayout = Instance.new("UIListLayout", TitleContainer)
+TitleContainerLayout.FillDirection = Enum.FillDirection.Horizontal
+TitleContainerLayout.SortOrder = Enum.SortOrder.LayoutOrder
+TitleContainerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+TitleContainerLayout.Padding = UDim.new(0, 6)
+
+local TitleIcon = Instance.new("ImageLabel", TitleContainer)
+TitleIcon.Size = UDim2.new(0, 18, 0, 18)
+TitleIcon.BackgroundTransparency = 1
+TitleIcon.Image = "rbxassetid://123184889462740"
+TitleIcon.LayoutOrder = 1
+
+local Title = Instance.new("TextLabel", TitleContainer)
+Title.Size = UDim2.new(1, -24, 1, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Game K1d"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 13
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.LayoutOrder = 2
+
+local BtnHolder = Instance.new("Frame", TopBar)
+BtnHolder.Size = UDim2.new(0, 56, 0, 22)
+BtnHolder.Position = UDim2.new(1, -64, 0.5, -11)
+BtnHolder.BackgroundTransparency = 1
+
+local BtnLayout = Instance.new("UIListLayout", BtnHolder)
+BtnLayout.FillDirection = Enum.FillDirection.Horizontal
+BtnLayout.Padding = UDim.new(0, 6)
+
+local MinBtn = Instance.new("ImageButton", BtnHolder)
+MinBtn.Size = UDim2.new(0, 22, 0, 22)
+MinBtn.BackgroundColor3 = Color3.fromRGB(30, 35, 40)
+MinBtn.Image = "rbxassetid://14407739314"
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1, 0)
+
+local CloseBtn = Instance.new("ImageButton", BtnHolder)
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+CloseBtn.Image = "rbxassetid://103151990451851"
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
+
+local Content = Instance.new("Frame", Main)
+Content.Size = UDim2.new(1, 0, 1, -45)
+Content.Position = UDim2.new(0, 0, 0, 45)
+Content.BackgroundTransparency = 1
+Content.BorderSizePixel = 0
+
+local ContentLayout = Instance.new("UIListLayout", Content)
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ContentLayout.Padding = UDim.new(0, 8)
+
+local ContentPad = Instance.new("UIPadding", Content)
+ContentPad.PaddingLeft = UDim.new(0, 12)
+ContentPad.PaddingRight = UDim.new(0, 12)
+ContentPad.PaddingTop = UDim.new(0, 10)
+
+local function createToggleRow(parent, name, iconId, callback)
+    local Row = Instance.new("Frame")
+    Row.Size = UDim2.new(1, 0, 0, 34)
+    Row.BackgroundColor3 = Color3.fromRGB(18, 22, 26)
+    Row.BorderSizePixel = 0
+    Row.Parent = parent
+    
+    local RowStroke = Instance.new("UIStroke", Row)
+    RowStroke.Color = Color3.fromRGB(40, 45, 50)
+    RowStroke.Thickness = 0.8
+
+    local RowContainer = Instance.new("Frame", Row)
+    RowContainer.Size = UDim2.new(1, -60, 1, 0)
+    RowContainer.Position = UDim2.new(0, 12, 0, 0)
+    RowContainer.BackgroundTransparency = 1
+
+    local RowContainerLayout = Instance.new("UIListLayout", RowContainer)
+    RowContainerLayout.FillDirection = Enum.FillDirection.Horizontal
+    RowContainerLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    RowContainerLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    RowContainerLayout.Padding = UDim.new(0, 6)
+
+    if iconId then
+        local OptIcon = Instance.new("ImageLabel", RowContainer)
+        OptIcon.Size = UDim2.new(0, 16, 0, 16)
+        OptIcon.BackgroundTransparency = 1
+        OptIcon.Image = "rbxassetid://" .. tostring(iconId)
+        OptIcon.LayoutOrder = 1
+    end
+
+    local Label = Instance.new("TextLabel", RowContainer)
+    Label.Size = UDim2.new(1, -22, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = name
+    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Label.TextSize = 11
+    Label.Font = Enum.Font.GothamBold
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.LayoutOrder = 2
+
+    local Switch = Instance.new("TextButton", Row)
+    Switch.Size = UDim2.new(0, 36, 0, 18)
+    Switch.Position = UDim2.new(1, -48, 0.5, -9)
+    Switch.BackgroundColor3 = Color3.fromRGB(30, 35, 40)
+    Switch.Text = ""
+    Instance.new("UICorner", Switch).CornerRadius = UDim.new(1, 0)
+
+    local SliderBall = Instance.new("Frame", Switch)
+    SliderBall.Size = UDim2.new(0, 14, 0, 14)
+    SliderBall.Position = UDim2.new(0, 2, 0.5, -7)
+    SliderBall.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    Instance.new("UICorner", SliderBall).CornerRadius = UDim.new(1, 0)
+
+    local state = false
+    Switch.MouseButton1Click:Connect(function()
+        if clickSound then clickSound:Play() end
+        state = not state
+        local targetPos = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+        local targetColor = state and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(30, 35, 40)
+        local ballColor = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 200)
+        
+        TweenService:Create(SliderBall, TweenInfo.new(0.2), {Position = targetPos, BackgroundColor3 = ballColor}):Play()
+        TweenService:Create(Switch, TweenInfo.new(0.2), {BackgroundColor3 = targetColor}):Play()
+        
+        callback(state)
+    end)
+end
+
+_G.GameK1dEnabled = false
+local descendantConnection = nil
+local quizScanSpawned = false
+
+createToggleRow(Content, "GameK1d", "133516881835614", function(enabled)
+    _G.GameK1dEnabled = enabled
+    if _G.GameK1dEnabled then
+        task.spawn(executeFullCleanup)
+        
+        if not descendantConnection then
+            descendantConnection = playerGui.DescendantAdded:Connect(function(child)
+                if _G.GameK1dEnabled then
+                    local insideAssets = false
+                    local insideGame = false
+                    local gameName = ""
+                    
+                    local parentObj = child.Parent
+                    while parentObj do
+                        if parentObj.Name == "Assets" and parentObj.Parent and parentObj.Parent.Name == "FunGui" then
+                            insideAssets = true
+                            break
+                        end
+                        if gamesToDelete[parentObj.Name] then
+                            insideGame = true
+                            gameName = parentObj.Name
+                        end
+                        parentObj = parentObj.Parent
+                    end
+                    
+                    if insideAssets and namesToDestroy[child.Name] then
+                        destroyObject(child)
+                    end
+                    
+                    if insideGame then
+                        for _, itemName in pairs(gamesToDelete[gameName]) do
+                            if child.Name == itemName then
+                                destroyObject(child)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        if not quizScanSpawned then
+            quizScanSpawned = true
+            task.spawn(function()
+                while _G.GameK1dEnabled do
+                    pcall(scanAndCheckScreen)
+                    task.wait(0.1)
+                end
+            end)
+        end
+    else
+        if descendantConnection then
+            descendantConnection:Disconnect()
+            descendantConnection = nil
+        end
+        quizScanSpawned = false
+    end
+end)
+
+MinBtn.MouseButton1Click:Connect(function()
+    if not active then return end
+    if clickSound then clickSound:Play() end
+    minimized = not minimized
+    Main:TweenSize(UDim2.new(0, 270, 0, minimized and 44 or fullHeight), "Out", "Quint", 0.25, true)
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    if not active then return end
+    if deleteSound then deleteSound:Play() end
+    task.wait(0.15)
+    active = false
+    _G.GameK1dEnabled = false
+    if descendantConnection then descendantConnection:Disconnect() end
+    ScreenGui:Destroy()
+end)
